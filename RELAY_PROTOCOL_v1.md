@@ -99,10 +99,15 @@ Identity {
 
 **Key derivation:**
 ```
+# Identity keys (for authentication)
 signing_keypair     = Ed25519.generate()
-encryption_keypair  = X25519.derive(signing_keypair)
 fingerprint         = SHA256(signing_keypair.public_key)[0:32].hex()
+
+# Edge keys (for encryption) - RANDOM, not derived!
+edge_keypair        = X25519.generate()  # Unique per edge
 ```
+
+**IMPORTANT:** Edge X25519 keys are randomly generated, NOT derived from identity keys. This provides cryptographic unlinkability between edges.
 
 ### 2.4 Key Rotation
 
@@ -321,6 +326,70 @@ When identity status = `hidden`:
 - Native edge rejects incoming messages
 - Other edges continue to function
 - Useful for "dark mode" operation
+
+### 4.6 Edge-to-Edge Encryption
+
+**IMPORTANT:** As of v1.1, all messaging uses edge-to-edge encryption. Each edge has its own unique X25519 keypair.
+
+```
+Edge Keypair {
+  edge_id:              string      # unique identifier (ULID)
+  x25519_public_key:    bytes       # unique X25519 public key for this edge
+  x25519_secret_key:    bytes       # stored encrypted on client only
+}
+```
+
+**Security Model:**
+- Each edge generates a **random** X25519 keypair (not derived from identity)
+- Edges owned by the same identity have **different** public keys
+- This provides **cryptographic unlinkability** between edges
+- External observers cannot determine if two edges belong to the same identity
+
+**Edge Resolution:**
+- `POST /v1/edge/resolve` returns edge encryption key (no identity data)
+- Response contains ONLY: `edgeId`, `x25519PublicKey`, `displayName`, `type`, `status`
+- Identity public key is **never** included in public API responses
+
+**Messaging Flow:**
+```
+Sender Edge                                    Recipient Edge
+    │                                               │
+    │ 1. Resolve recipient edge                     │
+    │    POST /v1/edge/resolve                      │
+    │    → { edgeId, x25519PublicKey }              │
+    │                                               │
+    │ 2. Encrypt to recipient's x25519 key          │
+    │    (Double Ratchet or static X25519)          │
+    │                                               │
+    │ 3. POST /v1/messages                          │
+    │    { edge_id: sender, payload: encrypted }    │
+    │─────────────────────────────────────────────▶│
+    │                                               │
+```
+
+### 4.7 Bridge Edges
+
+Bridges (email gateway, Discord bot, etc.) operate as special edges.
+
+```
+Bridge Edge {
+  edge_id:              "RELAY_EMAIL_BRIDGE"  # well-known ID
+  type:                 "bridge"
+  address:              "email"               # bridge identifier
+  x25519_public_key:    bytes                 # bridge's encryption key
+}
+```
+
+**Bridge Resolution:**
+- Bridges are resolved via the same `POST /v1/edge/resolve` endpoint
+- Request: `{ type: "bridge", address: "email" }`
+- Response: `{ edgeId, x25519PublicKey, ... }`
+
+**Security Level:**
+- Bridge communications are `gateway_secured`
+- Bridge sees plaintext for protocol translation (e.g., email ↔ Relay)
+- Content is encrypted between client and bridge
+- Bridge encrypts/decrypts at the boundary
 
 ---
 
@@ -624,8 +693,7 @@ The reference implementation is maintained at:
 ## Document History
 
 | Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 | 2026-01-31 | Initial specification |
+|---------|------|---------|| 1.1.0 | 2026-02-02 | Edge-to-edge encryption model, unique edge keypairs, bridge edge pattern || 1.0.0 | 2026-01-31 | Initial specification |
 
 ---
 

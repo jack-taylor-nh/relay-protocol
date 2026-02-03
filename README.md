@@ -1276,7 +1276,7 @@ Relay is an open protocol. We welcome contributions:
 
 ## License
 
-This specification is released under the MIT License.
+This specification is released under the CC BY 4.0 License.
 
 ---
 

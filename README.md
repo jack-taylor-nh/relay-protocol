@@ -11,7 +11,7 @@
 **Version:** 1.1.0  
 **Date:** February 2, 2026  
 **Authors:** Relay Foundation  
-**License:** MIT
+**License:** CC BY 4.0
 
 ---
 
